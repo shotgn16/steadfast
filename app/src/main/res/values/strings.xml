@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Steadfast</string>
+    <string name="accessibility_description">Steadfast uses this to block apps you have limited, block content and searches that match your keyword lists, and protect its own settings. Everything it reads stays on this phone; your accountability partner only learns that a block happened, never what it was.</string>
+</resources>

@@ -1,0 +1,45 @@
+name: Build Steadfast APK
+
+on:
+  push:
+    branches: [main, master]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Get the code
+        uses: actions/checkout@v4
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Build the APK
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleRelease --no-daemon --stacktrace
+          cp app/build/outputs/apk/release/app-release.apk Steadfast.apk
+
+      - name: Keep the APK as a build download
+        uses: actions/upload-artifact@v4
+        with:
+          name: Steadfast-APK
+          path: Steadfast.apk
+
+      - name: Publish a release you can download on your phone
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v1.0.${{ github.run_number }}
+          name: Steadfast 1.0.${{ github.run_number }}
+          body: Download Steadfast.apk below on your Android phone and open it to install.
+          files: Steadfast.apk

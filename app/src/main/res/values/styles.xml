@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="AppTheme" parent="@android:style/Theme.Material.Light.DarkActionBar">
+        <item name="android:colorPrimary">#2E5E8C</item>
+        <item name="android:colorPrimaryDark">#1E4366</item>
+        <item name="android:colorAccent">#2E5E8C</item>
+        <item name="android:windowBackground">@android:color/white</item>
+    </style>
+
+    <style name="BlockTheme" parent="@android:style/Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/block_bg</item>
+        <item name="android:statusBarColor">@color/block_bg</item>
+        <item name="android:navigationBarColor">@color/block_bg</item>
+    </style>
+</resources>

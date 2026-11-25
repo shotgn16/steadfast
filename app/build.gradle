@@ -1,0 +1,46 @@
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'com.steadfast.guard'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId 'com.steadfast.guard'
+        minSdk 26
+        targetSdk 34
+        // Every GitHub build gets a higher version so updates install over the old one.
+        versionCode((System.getenv('GITHUB_RUN_NUMBER') ?: '1') as int)
+        versionName "1.0." + (System.getenv('GITHUB_RUN_NUMBER') ?: '0')
+    }
+
+    signingConfigs {
+        release {
+            storeFile file('../keystore/steadfast.jks')
+            storePassword System.getenv('STEADFAST_STORE_PASSWORD') ?: 'steadfast-store'
+            keyAlias 'steadfast'
+            keyPassword System.getenv('STEADFAST_KEY_PASSWORD') ?: 'steadfast-store'
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            signingConfig signingConfigs.release
+        }
+        debug {
+            signingConfig signingConfigs.release
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    lint {
+        abortOnError false
+        checkReleaseBuilds false
+    }
+}
