@@ -70,6 +70,7 @@ final class Config {
     boolean setupComplete;
     String pinHash = "", pinSalt = "";
     String deviceName = "";
+    long setupAt;
 
     // ---- rules
     final Map<String, AppRule> apps = new ConcurrentHashMap<>();
@@ -151,7 +152,7 @@ final class Config {
     private JSONObject toJson() throws JSONException {
         JSONObject o = new JSONObject();
         o.put("role", role); o.put("setup", setupComplete); o.put("pinHash", pinHash); o.put("pinSalt", pinSalt);
-        o.put("deviceName", deviceName);
+        o.put("deviceName", deviceName); o.put("setupAt", setupAt);
         JSONObject a = new JSONObject();
         for (Map.Entry<String, AppRule> e : apps.entrySet()) a.put(e.getKey(), e.getValue().toJson());
         o.put("apps", a);
@@ -174,7 +175,7 @@ final class Config {
     private void load(JSONObject o) {
         role = o.optString("role", ""); setupComplete = o.optBoolean("setup");
         pinHash = o.optString("pinHash", ""); pinSalt = o.optString("pinSalt", "");
-        deviceName = o.optString("deviceName", "");
+        deviceName = o.optString("deviceName", ""); setupAt = o.optLong("setupAt");
         JSONObject a = o.optJSONObject("apps");
         if (a != null) {
             Iterator<String> it = a.keys();

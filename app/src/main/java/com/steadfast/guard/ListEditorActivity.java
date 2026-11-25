@@ -1,14 +1,15 @@
 package com.steadfast.guard;
 
 import android.app.Activity;
-import android.graphics.Color;
+import android.content.res.ColorStateList;
 import android.os.Bundle;
 import android.text.InputType;
 import android.view.Gravity;
+import android.view.KeyEvent;
 import android.view.View;
-import android.view.ViewGroup;
-import android.widget.Button;
+import android.view.inputmethod.EditorInfo;
 import android.widget.EditText;
+import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
@@ -33,7 +34,6 @@ public class ListEditorActivity extends Activity {
     };
 
     private String which;
-    private LinearLayout items;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -52,103 +52,127 @@ public class ListEditorActivity extends Activity {
         }
     }
 
-    private boolean isDomains() {
-        return LIST_BLOCKED.equals(which) || LIST_ALLOWED.equals(which);
-    }
+    private boolean isDomains() { return LIST_BLOCKED.equals(which) || LIST_ALLOWED.equals(which); }
 
     /** For the allow-list, adding is the loosening action; for every other list removing is. */
-    private boolean addLoosens() {
-        return LIST_ALLOWED.equals(which);
-    }
+    private boolean addLoosens() { return LIST_ALLOWED.equals(which); }
 
     private void render() {
         String title, help;
+        int icon;
         switch (which) {
             case LIST_ALLOWED:
-                title = "Always-allowed websites";
-                help = "Exceptions that are never blocked by your lists or keywords (e.g. a church site that a keyword catches). "
-                        + "Category filtering by the web filter still applies.";
+                title = "Always allowed"; icon = R.drawable.ic_check;
+                help = "Sites that are never blocked by your lists or keywords, e.g. a church site a keyword catches by mistake. "
+                        + "The category filter still applies.";
                 break;
             case LIST_KEYWORDS:
-                title = "Keyword filter";
-                help = "Blocks web addresses, pages and app screens showing these words, including image descriptions (alt text). "
-                        + "Whole words only, so “sex” won't block “Essex”. End a word with * to match endings (e.g. nud*). "
-                        + "Pictures without text can't be read; the web filter level and SafeSearch handle explicit images.";
+                title = "Keyword filter"; icon = R.drawable.ic_tag;
+                help = "Blocks web addresses, pages and app screens showing these words, including image descriptions. "
+                        + "Whole words only, so “sex” won't block “Essex”. End with * to match endings, e.g. nud*.";
                 break;
             case LIST_SEARCH:
-                title = "Search filter";
-                help = "Blocks searches and typing that contain these words or phrases in any app: Google, YouTube, Instagram, TikTok and so on. "
-                        + "Keywords are also checked. End a word with * to match endings.";
+                title = "Search filter"; icon = R.drawable.ic_search;
+                help = "Blocks searches and typing containing these words or phrases in any app: Google, YouTube, Instagram, TikTok. "
+                        + "Keywords are checked too.";
                 break;
             default:
-                title = "Blocked websites";
-                help = "Enter a domain like example.com. All its subdomains (www.example.com, m.example.com…) are blocked too. "
-                        + "To block just one subdomain, enter it in full (e.g. news.example.com).";
+                title = "Blocked websites"; icon = R.drawable.ic_globe;
+                help = "Enter a domain like example.com. Every subdomain is blocked too. "
+                        + "To block just one subdomain, enter it in full, e.g. news.example.com.";
         }
-        LinearLayout p = Ui.page(this, title);
-        Ui.para(p, help);
+        final Ui.Screen s = Ui.screen(this, title, true);
+        Ui.Palette p = s.p;
+        LinearLayout v = s.content;
+        Ui.banner(v, icon, title, help, 0, null, null);
 
-        LinearLayout addRow = new LinearLayout(this);
-        addRow.setOrientation(LinearLayout.HORIZONTAL);
+        // input
+        LinearLayout box = new LinearLayout(this);
+        box.setGravity(Gravity.CENTER_VERTICAL);
+        box.setBackground(Ui.round(this, p.surface, 26));
+        box.setPadding(Ui.dp(this, 18), Ui.dp(this, 4), Ui.dp(this, 6), Ui.dp(this, 4));
         final EditText input = new EditText(this);
-        input.setHint(isDomains() ? "example.com" : "word or phrase");
+        input.setHint(isDomains() ? "example.com" : "Add a word or phrase");
+        input.setHintTextColor(p.faint);
+        input.setTextColor(p.text);
+        input.setBackground(null);
         input.setInputType(isDomains() ? InputType.TYPE_TEXT_VARIATION_URI | InputType.TYPE_CLASS_TEXT
                 : InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS);
         input.setSingleLine(true);
-        addRow.addView(input, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
-        Button add = new Button(this);
-        add.setText("Add");
-        add.setOnClickListener(new View.OnClickListener() {
-            @Override public void onClick(View v) { add(input.getText().toString()); }
+        input.setImeOptions(EditorInfo.IME_ACTION_DONE);
+        box.addView(input, new LinearLayout.LayoutParams(0, Ui.WRAP, 1));
+        ImageView add = Ui.iconButton(this, R.drawable.ic_plus, p.onPrimary, "Add", new View.OnClickListener() {
+            @Override public void onClick(View x) { add(input.getText().toString()); }
         });
-        addRow.addView(add);
-        p.addView(addRow);
+        add.setBackground(Ui.ripple(this, p.primary, 22, Ui.alpha(p.onPrimary, 0.25f)));
+        box.addView(add);
+        input.setOnEditorActionListener(new TextView.OnEditorActionListener() {
+            @Override public boolean onEditorAction(TextView tv, int id, KeyEvent e) { add(input.getText().toString()); return true; }
+        });
+        LinearLayout.LayoutParams bl = Ui.lp(Ui.MATCH, Ui.WRAP);
+        bl.bottomMargin = Ui.dp(this, 4);
+        v.addView(box, bl);
 
         if (LIST_KEYWORDS.equals(which) || LIST_SEARCH.equals(which)) {
-            Ui.button(p, "Add the starter list", new View.OnClickListener() {
-                @Override public void onClick(View v) {
+            TextView starter = Ui.text(this, "+ Add the starter list", 14, p.primary, Ui.medium());
+            starter.setPadding(Ui.dp(this, 8), Ui.dp(this, 10), Ui.dp(this, 8), Ui.dp(this, 4));
+            starter.setOnClickListener(new View.OnClickListener() {
+                @Override public void onClick(View x) {
                     Config c = Config.get(ListEditorActivity.this);
                     String[] src = LIST_KEYWORDS.equals(which) ? STARTER_KEYWORDS : STARTER_SEARCH;
-                    for (String s : src) set(c).add(s);
+                    for (String w : src) set(c).add(w);
                     c.save(ListEditorActivity.this);
                     render();
                 }
             });
+            v.addView(starter);
         }
 
-        Ui.header(p, set(Config.get(this)).size() + " entries");
-        items = new LinearLayout(this);
-        items.setOrientation(LinearLayout.VERTICAL);
-        p.addView(items);
-        List<String> sorted = new ArrayList<>(set(Config.get(this)));
+        Config c = Config.get(this);
+        List<String> sorted = new ArrayList<>(set(c));
         Collections.sort(sorted);
-        for (final String s : sorted) {
+        Ui.section(v, sorted.size() + (sorted.size() == 1 ? " entry" : " entries"));
+        if (sorted.isEmpty()) {
+            TextView e = Ui.text(this, "Nothing here yet.", 15, p.faint, null);
+            e.setGravity(Gravity.CENTER);
+            e.setPadding(0, Ui.dp(this, 20), 0, Ui.dp(this, 20));
+            v.addView(e, Ui.lp(Ui.MATCH, Ui.WRAP));
+            return;
+        }
+        LinearLayout card = Ui.card(v);
+        boolean first = true;
+        for (final String item : sorted) {
+            if (!first) Ui.divider(card);
+            first = false;
             LinearLayout r = new LinearLayout(this);
-            r.setOrientation(LinearLayout.HORIZONTAL);
             r.setGravity(Gravity.CENTER_VERTICAL);
-            TextView t = new TextView(this);
-            t.setText(s);
-            t.setTextSize(16);
-            t.setTextColor(Color.parseColor("#1B1B1B"));
-            r.addView(t, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
-            Button del = new Button(this);
-            del.setText("Remove");
-            del.setAllCaps(false);
-            del.setOnClickListener(new View.OnClickListener() {
-                @Override public void onClick(View v) { remove(s); }
+            r.setPadding(Ui.dp(this, 18), Ui.dp(this, 4), Ui.dp(this, 6), Ui.dp(this, 4));
+            r.setMinimumHeight(Ui.dp(this, 52));
+            r.addView(Ui.text(this, item, 16, p.text, null), new LinearLayout.LayoutParams(0, Ui.WRAP, 1));
+            ImageView del = Ui.iconButton(this, R.drawable.ic_close, p.muted, "Remove " + item, new View.OnClickListener() {
+                @Override public void onClick(View x) { remove(item); }
             });
+            del.setImageTintList(ColorStateList.valueOf(p.muted));
             r.addView(del);
-            items.addView(r);
+            card.addView(r, Ui.lp(Ui.MATCH, Ui.WRAP));
+        }
+        // keep divider indentation sensible for rows without icons
+        for (int i = 0; i < card.getChildCount(); i++) {
+            View ch = card.getChildAt(i);
+            if (!(ch instanceof LinearLayout)) {
+                LinearLayout.LayoutParams lp = (LinearLayout.LayoutParams) ch.getLayoutParams();
+                lp.leftMargin = Ui.dp(this, 18);
+            }
         }
     }
 
     private void add(String raw) {
-        String v = isDomains() ? Policy.normalizeDomain(raw) : raw.trim().toLowerCase(Locale.ROOT);
-        if (v.isEmpty() || (isDomains() && !v.contains("."))) {
+        String val = isDomains() ? Policy.normalizeDomain(raw) : raw.trim().toLowerCase(Locale.ROOT);
+        if (val.isEmpty() || (isDomains() && !val.contains("."))) {
             Ui.toast(this, isDomains() ? "Enter a domain like example.com" : "Enter a word");
             return;
         }
-        final String value = v;
+        final String value = val;
         Runnable apply = new Runnable() {
             @Override public void run() {
                 Config c = Config.get(ListEditorActivity.this);

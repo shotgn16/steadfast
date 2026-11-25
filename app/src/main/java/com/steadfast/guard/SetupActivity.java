@@ -1,20 +1,28 @@
 package com.steadfast.guard;
 
-import android.Manifest;
 import android.app.Activity;
 import android.content.Intent;
 import android.content.pm.PackageManager;
+import android.graphics.Typeface;
 import android.net.Uri;
 import android.net.VpnService;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.PowerManager;
 import android.provider.Settings;
+import android.view.Gravity;
 import android.view.View;
+import android.widget.FrameLayout;
 import android.widget.LinearLayout;
+import android.widget.TextView;
 
 /** First-run wizard: PIN and the Android permissions Steadfast needs. */
 public class SetupActivity extends Activity {
+
+    @Override
+    protected void onCreate(Bundle b) {
+        super.onCreate(b);
+    }
 
     @Override
     protected void onResume() {
@@ -24,9 +32,9 @@ public class SetupActivity extends Activity {
 
     private void render() {
         final Config c = Config.get(this);
-        LinearLayout p = Ui.page(this, "Set up Steadfast");
-        Ui.title(p, "Set up protection");
-        Ui.para(p, "Work through each step. Android will show its own screens. Come back here after each one.");
+        Ui.Screen s = Ui.screen(this, "Set up protection", false);
+        Ui.Palette p = s.p;
+        LinearLayout v = s.content;
 
         boolean pin = !c.pinHash.isEmpty();
         boolean usage = Guard.usageAccessGranted(this);
@@ -34,35 +42,64 @@ public class SetupActivity extends Activity {
         boolean vpn = Guard.vpnPermitted(this);
         boolean admin = Guard.adminActive(this);
         boolean notif = Build.VERSION.SDK_INT < 33
-                || checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED;
+                || checkSelfPermission("android.permission.POST_NOTIFICATIONS") == PackageManager.PERMISSION_GRANTED;
         PowerManager pm = (PowerManager) getSystemService(POWER_SERVICE);
         boolean battery = pm != null && pm.isIgnoringBatteryOptimizations(getPackageName());
+        boolean[] done = {pin, usage, acc, vpn, admin, notif, battery};
+        int count = 0;
+        for (boolean d : done) if (d) count++;
 
-        step(p, "1. Create your master PIN", pin, "Needed to change any setting. Ideally your accountability partner sets it.",
+        // progress
+        LinearLayout prog = Ui.paddedCard(v);
+        LinearLayout pr = new LinearLayout(this);
+        pr.setGravity(Gravity.CENTER_VERTICAL);
+        pr.addView(Ui.text(this, count + " of 7 done", 17, p.text, Typeface.DEFAULT_BOLD), new LinearLayout.LayoutParams(0, Ui.WRAP, 1));
+        pr.addView(Ui.text(this, "Steps 1, 3 & 4 required", 13, p.muted, null));
+        prog.addView(pr);
+        FrameLayout bar = new FrameLayout(this);
+        bar.setBackground(Ui.round(this, p.surface2, 4));
+        View fill = new View(this);
+        fill.setBackground(Ui.round(this, p.primary, 4));
+        LinearLayout.LayoutParams bl = Ui.lp(Ui.MATCH, Ui.dp(this, 8));
+        bl.topMargin = Ui.dp(this, 12);
+        prog.addView(bar, bl);
+        final int pct = count;
+        bar.addView(fill, new FrameLayout.LayoutParams(0, Ui.MATCH));
+        final FrameLayout barRef = bar;
+        final View fillRef = fill;
+        bar.post(new Runnable() {
+            @Override public void run() {
+                FrameLayout.LayoutParams fl = (FrameLayout.LayoutParams) fillRef.getLayoutParams();
+                fl.width = barRef.getWidth() * pct / 7;
+                fillRef.setLayoutParams(fl);
+            }
+        });
+
+        step(v, 1, "Create your master PIN", pin, "Needed to change any setting. Ideally your accountability partner chooses it.",
                 "Create PIN", new Runnable() { @Override public void run() { createPin(); } });
 
-        step(p, "2. Allow usage access", usage, "Lets Steadfast measure how long you use each app (for time limits).",
+        step(v, 2, "Allow usage access", usage, "Lets Steadfast measure how long you use each app, for time limits.",
                 "Open usage access", new Runnable() {
                     @Override public void run() { open(Settings.ACTION_USAGE_ACCESS_SETTINGS); }
                 });
 
-        step(p, "3. Turn on app & content protection", acc,
-                "Settings → Accessibility → Steadfast → turn on. This blocks apps, keywords and searches, all on this phone.\n\n"
-                        + "If Android says “Restricted setting”: tap the button below to open App info, tap ⋮ (top right) → "
-                        + "“Allow restricted settings”, then try again.",
+        LinearLayout accCard = step(v, 3, "Turn on app & content protection", acc,
+                "Accessibility → Steadfast → On. This blocks apps, keywords and searches, all on this phone.",
                 "Open accessibility settings", new Runnable() {
                     @Override public void run() { open(Settings.ACTION_ACCESSIBILITY_SETTINGS); }
                 });
         if (!acc) {
-            Ui.button(p, "Open App info (to allow restricted settings)", new View.OnClickListener() {
-                @Override public void onClick(View v) {
-                    startActivity(new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:" + getPackageName())));
-                }
-            });
+            Ui.banner(accCard, R.drawable.ic_warning, "Says “Restricted setting”?",
+                    "Open App info, tap ⋮ in the top-right corner, choose “Allow restricted settings”, then try again.", 3,
+                    "Open App info", new View.OnClickListener() {
+                        @Override public void onClick(View x) {
+                            startActivity(new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:" + getPackageName())));
+                        }
+                    });
         }
 
-        step(p, "4. Start the web filter", vpn,
-                "Creates an on-device filter for website lookups (shows a key icon). Your browsing does not go through any server of ours.",
+        step(v, 4, "Start the web filter", vpn,
+                "An on-phone filter for website lookups. You'll see a key icon. Your browsing doesn't go through any server of ours.",
                 "Start web filter", new Runnable() {
                     @Override public void run() {
                         Intent prep = VpnService.prepare(SetupActivity.this);
@@ -71,18 +108,18 @@ public class SetupActivity extends Activity {
                     }
                 });
 
-        step(p, "5. Turn on uninstall protection", admin,
-                "Android won't let Steadfast be removed without first switching this off, which alerts your partner.",
+        step(v, 5, "Turn on uninstall protection", admin,
+                "Steadfast can't be removed without switching this off first, and that alerts your partner.",
                 "Turn on", new Runnable() { @Override public void run() { MainActivity.requestAdmin(SetupActivity.this); } });
 
-        step(p, "6. Allow notifications", notif, "So you can see when your partner changes something.",
+        step(v, 6, "Allow notifications", notif, "So you can see when your partner changes something.",
                 "Allow", new Runnable() {
                     @Override public void run() {
-                        if (Build.VERSION.SDK_INT >= 33) requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS}, 2);
+                        if (Build.VERSION.SDK_INT >= 33) requestPermissions(new String[]{"android.permission.POST_NOTIFICATIONS"}, 2);
                     }
                 });
 
-        step(p, "7. Keep Steadfast running", battery, "Stops Android putting Steadfast to sleep.",
+        step(v, 7, "Keep Steadfast running", battery, "Stops Android putting Steadfast to sleep.",
                 "Allow background running", new Runnable() {
                     @Override public void run() {
                         try {
@@ -94,21 +131,18 @@ public class SetupActivity extends Activity {
                     }
                 });
 
-        Ui.header(p, "8. Recommended: Always-on VPN");
-        Ui.para(p, "In VPN settings tap the ⚙ next to Steadfast and turn on “Always-on VPN” so the filter starts by itself. "
-                + "Leave “Block connections without VPN” OFF.");
-        Ui.button(p, "Open VPN settings", new View.OnClickListener() {
-            @Override public void onClick(View v) { open(Settings.ACTION_VPN_SETTINGS); }
-        });
+        Ui.banner(v, R.drawable.ic_key, "Recommended: Always-on VPN",
+                "In VPN settings, tap ⚙ next to Steadfast and turn on “Always-on VPN”. Leave “Block connections without VPN” off.",
+                0, "Open VPN settings", new View.OnClickListener() {
+                    @Override public void onClick(View x) { open(Settings.ACTION_VPN_SETTINGS); }
+                });
 
-        Ui.header(p, "Finish");
         final boolean ready = pin && acc && vpn;
-        Ui.para(p, ready ? "Steadfast is ready. You can add apps, websites and keywords next, then connect your accountability partner."
-                : "Steps 1, 3 and 4 are required. The others are strongly recommended.");
-        Ui.button(p, "Finish setup", new View.OnClickListener() {
-            @Override public void onClick(View v) {
+        Ui.button(v, ready ? "Finish setup" : "Finish setup (complete steps 1, 3 & 4)", new View.OnClickListener() {
+            @Override public void onClick(View x) {
                 if (!ready) { Ui.toast(SetupActivity.this, "Please finish steps 1, 3 and 4 first."); return; }
                 c.setupComplete = true;
+                c.setupAt = System.currentTimeMillis();
                 if (c.deviceName.isEmpty()) c.deviceName = Build.MODEL;
                 c.lastReportDay = EventLog.dayKey(System.currentTimeMillis() - 24 * 3600000L);
                 if (c.keywords.isEmpty()) for (String k : ListEditorActivity.STARTER_KEYWORDS) c.keywords.add(k);
@@ -120,24 +154,51 @@ public class SetupActivity extends Activity {
                 finish();
             }
         });
-        Ui.button(p, "Back (change role)", new View.OnClickListener() {
-            @Override public void onClick(View v) {
-                if (!c.pinHash.isEmpty()) { Ui.toast(SetupActivity.this, "A PIN is already set. Finish setup instead."); return; }
-                c.role = "";
-                c.save(SetupActivity.this);
-                startActivity(new Intent(SetupActivity.this, MainActivity.class));
-                finish();
-            }
-        });
+        if (c.pinHash.isEmpty()) {
+            TextView back = Ui.text(this, "Back: I'm an accountability partner instead", 14, p.primary, Ui.medium());
+            back.setGravity(Gravity.CENTER);
+            back.setPadding(0, Ui.dp(this, 12), 0, Ui.dp(this, 12));
+            back.setOnClickListener(new View.OnClickListener() {
+                @Override public void onClick(View x) {
+                    c.role = "";
+                    c.save(SetupActivity.this);
+                    startActivity(new Intent(SetupActivity.this, MainActivity.class));
+                    finish();
+                }
+            });
+            v.addView(back, Ui.lp(Ui.MATCH, Ui.WRAP));
+        }
     }
 
-    private void step(LinearLayout p, String title, boolean done, String explain, String action, final Runnable run) {
-        Ui.header(p, title);
-        Ui.status(p, done ? "Done" : "Not done yet", done);
-        Ui.para(p, explain);
-        if (!done) Ui.button(p, action, new View.OnClickListener() {
-            @Override public void onClick(View v) { run.run(); }
-        });
+    private LinearLayout step(LinearLayout v, int n, String title, boolean done, String explain, String action, final Runnable run) {
+        Ui.Palette p = Ui.p(this);
+        LinearLayout card = Ui.paddedCard(v);
+        LinearLayout head = new LinearLayout(this);
+        head.setGravity(Gravity.CENTER_VERTICAL);
+        if (done) {
+            head.addView(Ui.iconBadge(this, R.drawable.ic_check, p.ok, p.okContainer, 36));
+        } else {
+            TextView num = Ui.text(this, String.valueOf(n), 15, p.dark ? p.onPrimaryContainer : p.primary, Typeface.DEFAULT_BOLD);
+            num.setGravity(Gravity.CENTER);
+            num.setBackground(Ui.oval(p.primaryContainer));
+            head.addView(num, new LinearLayout.LayoutParams(Ui.dp(this, 36), Ui.dp(this, 36)));
+        }
+        LinearLayout col = new LinearLayout(this);
+        col.setOrientation(LinearLayout.VERTICAL);
+        col.setPadding(Ui.dp(this, 14), 0, 0, 0);
+        col.addView(Ui.text(this, title, 16, done ? p.muted : p.text, Ui.medium()));
+        if (done) col.addView(Ui.text(this, "Done", 13, p.ok, null));
+        head.addView(col, new LinearLayout.LayoutParams(0, Ui.WRAP, 1));
+        card.addView(head);
+        if (!done) {
+            TextView e = Ui.text(this, explain, 14, p.muted, null);
+            e.setPadding(0, Ui.dp(this, 10), 0, Ui.dp(this, 4));
+            card.addView(e);
+            Ui.button(card, action, new View.OnClickListener() {
+                @Override public void onClick(View x) { run.run(); }
+            });
+        }
+        return card;
     }
 
     private void open(String action) {
@@ -145,7 +206,7 @@ public class SetupActivity extends Activity {
     }
 
     private void createPin() {
-        Ui.pin(this, "Create master PIN", "4–10 digits. Don't use a code you use elsewhere.", new Ui.TextCallback() {
+        Ui.pin(this, "Create master PIN", "4–10 digits. Don't reuse a code you use elsewhere.", new Ui.TextCallback() {
             @Override public void on(final String p1) {
                 if (p1.length() < 4 || p1.length() > 10) { Ui.toast(SetupActivity.this, "Use 4–10 digits"); return; }
                 Ui.pin(SetupActivity.this, "Repeat PIN", null, new Ui.TextCallback() {
@@ -168,10 +229,5 @@ public class SetupActivity extends Activity {
     @Override
     public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
         render();
-    }
-
-    @Override
-    protected void onCreate(Bundle b) {
-        super.onCreate(b);
     }
 }

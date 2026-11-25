@@ -11,6 +11,9 @@ import android.nfc.tech.NdefFormatable;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
+import android.provider.Settings;
+import android.graphics.Typeface;
+import android.view.Gravity;
 import android.view.View;
 import android.widget.LinearLayout;
 import android.widget.TextView;
@@ -75,58 +78,84 @@ public class NfcActivity extends Activity implements NfcAdapter.ReaderCallback {
 
     private void render() {
         final Config c = Config.get(this);
-        LinearLayout p = Ui.page(this, "NFC lock");
-        Ui.title(p, c.nfcLocked ? "🔒 Locked" : "🔓 Unlocked");
+        Ui.Screen s = Ui.screen(this, "NFC lock", true);
+        Ui.Palette p = s.p;
+        LinearLayout v = s.content;
+        v.setGravity(Gravity.CENTER_HORIZONTAL);
+
+        // big lock state
+        boolean reg = MODE_REGISTER.equals(mode);
+        int fg = reg ? (p.dark ? p.onPrimaryContainer : p.primary) : c.nfcLocked ? p.accent : p.ok;
+        int bg = reg ? p.primaryContainer : c.nfcLocked ? Ui.alpha(p.accent, 0.16f) : p.okContainer;
+        View spacer = new View(this);
+        v.addView(spacer, new LinearLayout.LayoutParams(1, Ui.dp(this, 16)));
+        v.addView(Ui.iconBadge(this, reg ? R.drawable.ic_nfc : c.nfcLocked ? R.drawable.ic_lock : R.drawable.ic_unlock, fg, bg, 112));
+        TextView state = Ui.text(this, reg ? "Ready to register" : c.nfcLocked ? "Locked" : "Unlocked", 26, p.text, Typeface.DEFAULT_BOLD);
+        state.setGravity(Gravity.CENTER);
+        state.setPadding(0, Ui.dp(this, 18), 0, Ui.dp(this, 4));
+        v.addView(state, Ui.lp(Ui.MATCH, Ui.WRAP));
+        statusView = Ui.text(this, instruction(c), 16, p.muted, null);
+        statusView.setGravity(Gravity.CENTER);
+        statusView.setPadding(Ui.dp(this, 16), 0, Ui.dp(this, 16), Ui.dp(this, 20));
+        v.addView(statusView, Ui.lp(Ui.MATCH, Ui.WRAP));
+
         if (adapter == null) {
-            Ui.status(p, "This phone has no NFC reader.", false);
+            Ui.banner(v, R.drawable.ic_warning, "This phone has no NFC reader", null, 2, null, null);
             return;
         }
         if (!adapter.isEnabled()) {
-            Ui.status(p, "NFC is switched off. Turn it on in Android settings.", false);
-        }
-        statusView = Ui.big(p, instruction(c), 18, Ui.PRIMARY);
-
-        if (MODE_MANAGE.equals(mode) || MODE_REGISTER.equals(mode)) {
-            Ui.header(p, "Tags");
-            Ui.para(p, c.nfcTags.size() + " tag(s) registered. Any cheap NTAG213/215 sticker or card works. "
-                    + "Keep one somewhere inconvenient, or give one to your partner.");
-            Ui.button(p, "Register a new tag", new View.OnClickListener() {
-                @Override public void onClick(View v) {
-                    Auth.requirePin(NfcActivity.this, new Runnable() {
-                        @Override public void run() { mode = MODE_REGISTER; render(); }
+            Ui.banner(v, R.drawable.ic_warning, "NFC is switched off", "Turn it on in Android settings to use tags.", 3,
+                    "Open NFC settings", new View.OnClickListener() {
+                        @Override public void onClick(View x) {
+                            try { startActivity(new Intent(Settings.ACTION_NFC_SETTINGS)); } catch (Exception e) { startActivity(new Intent(Settings.ACTION_SETTINGS)); }
+                        }
                     });
-                }
-            });
-            Ui.header(p, "When locked");
-            Ui.row(p, "Lockdown: only essential apps", c.nfcLockdown ? "On: every app except essentials is blocked while locked"
-                    : "Off: locking only freezes settings", new View.OnClickListener() {
-                @Override public void onClick(View v) {
-                    if (c.nfcLockdown) {
-                        Auth.requireLoosen(NfcActivity.this, "turned off NFC lockdown", new Runnable() {
-                            @Override public void run() { c.nfcLockdown = false; c.save(NfcActivity.this); render(); }
-                        });
-                    } else { c.nfcLockdown = true; c.save(NfcActivity.this); render(); }
-                }
-            });
-            Ui.para(p, "While locked, nothing can be loosened, the PIN alone isn't enough. Unlock by scanning a tag "
-                    + "or with your partner's code. Lost every tag? Your partner can unlock you remotely.");
+        }
+
+        if (MODE_MANAGE.equals(mode) || reg) {
+            v.setGravity(Gravity.NO_GRAVITY);
+            Ui.section(v, "Tags");
+            LinearLayout t = Ui.card(v);
+            Ui.row(t, R.drawable.ic_plus, "Register a new tag", c.nfcTags.size() + " registered · any NTAG213/215 sticker or card",
+                    Ui.T_CHEVRON, new View.OnClickListener() {
+                        @Override public void onClick(View x) {
+                            Auth.requirePin(NfcActivity.this, new Runnable() {
+                                @Override public void run() { mode = MODE_REGISTER; render(); }
+                            });
+                        }
+                    });
             if (!c.nfcTags.isEmpty()) {
-                Ui.row(p, "Remove all tags", null, new View.OnClickListener() {
-                    @Override public void onClick(View v) {
+                Ui.divider(t);
+                Ui.row(t, R.drawable.ic_close, "Remove all tags", null, Ui.T_NONE, null, new View.OnClickListener() {
+                    @Override public void onClick(View x) {
                         Auth.requireLoosen(NfcActivity.this, "removed NFC tags", new Runnable() {
                             @Override public void run() {
                                 c.nfcTags.clear(); c.nfcLocked = false; c.save(NfcActivity.this); render();
                             }
                         });
                     }
-                });
+                }, 2);
             }
+            Ui.section(v, "When locked");
+            LinearLayout w = Ui.card(v);
+            Ui.row(w, R.drawable.ic_apps, "Lockdown mode", "Only essential apps open while locked",
+                    c.nfcLockdown ? Ui.T_SWITCH_ON : Ui.T_SWITCH_OFF, new View.OnClickListener() {
+                        @Override public void onClick(View x) {
+                            if (c.nfcLockdown) {
+                                Auth.requireLoosen(NfcActivity.this, "turned off NFC lockdown", new Runnable() {
+                                    @Override public void run() { c.nfcLockdown = false; c.save(NfcActivity.this); render(); }
+                                });
+                            } else { c.nfcLockdown = true; c.save(NfcActivity.this); render(); }
+                        }
+                    });
+            Ui.body(v, "While locked, nothing can be loosened, and the PIN alone isn't enough. Unlock by tapping your tag "
+                    + "or with your partner's code. Tip: keep a tag somewhere inconvenient, or give one to your partner.");
         }
     }
 
     private String instruction(Config c) {
-        if (MODE_REGISTER.equals(mode)) return "Hold the new tag against the back of your phone…";
-        if (c.nfcTags.isEmpty()) return "No tags registered yet.";
+        if (MODE_REGISTER.equals(mode)) return "Hold the new tag against the back of your phone";
+        if (c.nfcTags.isEmpty()) return "Register a tag below to lock and unlock with a tap.";
         if (MODE_UNLOCK.equals(mode)) return "Scan your tag to unlock.";
         if (MODE_MANAGE.equals(mode)) return c.nfcLocked ? "Scan a registered tag to unlock." : "Scan a registered tag to lock.";
         return c.nfcLocked ? "Scan your tag to unlock." : "Scan your tag to lock.";

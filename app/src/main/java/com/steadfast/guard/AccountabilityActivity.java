@@ -4,12 +4,10 @@ import android.app.Activity;
 import android.content.ClipData;
 import android.content.ClipboardManager;
 import android.content.Intent;
-import android.graphics.Typeface;
 import android.os.Bundle;
 import android.text.InputType;
 import android.view.View;
 import android.widget.LinearLayout;
-import android.widget.TextView;
 
 /** Protected-device side of accountability: connect a partner and choose what they can do. */
 public class AccountabilityActivity extends Activity {
@@ -23,8 +21,8 @@ public class AccountabilityActivity extends Activity {
     protected void onResume() {
         super.onResume();
         if (!Auth.sessionOpen()) {
+            Ui.screen(this, "Accountability partner", true);
             Auth.requirePin(this, new Runnable() { @Override public void run() { render(); } });
-            Ui.page(this, "Accountability partner");
             return;
         }
         render();
@@ -32,91 +30,89 @@ public class AccountabilityActivity extends Activity {
 
     private void render() {
         final Config c = Config.get(this);
-        LinearLayout p = Ui.page(this, "Accountability partner");
-        Ui.title(p, "Accountability partner");
-        Ui.para(p, "Your partner is told WHEN you hit a block, try to get around protection, or loosen a setting, "
-                + "plus a daily report of totals. They are never told which website, word or search it was.");
+        Ui.Screen s = Ui.screen(this, "Accountability partner", true);
+        LinearLayout v = s.content;
 
         if (!c.partnerEnabled) {
-            Ui.button(p, "Set up accountability", new View.OnClickListener() {
-                @Override public void onClick(View v) {
-                    Partner.enable(AccountabilityActivity.this, c);
-                    render();
-                }
+            Ui.banner(v, R.drawable.ic_people, "How it works",
+                    "Your partner is told WHEN you hit a block, try to get around protection, or loosen a setting, plus a daily "
+                            + "report of totals. They're never told which website, word or search it was.", 0, null, null);
+            Ui.body(v, "Messages use the free ntfy.sh service, on private random channel names only you and your partner know.");
+            Ui.button(v, "Set up accountability", new View.OnClickListener() {
+                @Override public void onClick(View x) { Partner.enable(AccountabilityActivity.this, c); render(); }
             });
-            Ui.para(p, "Uses the free ntfy.sh notification service. Messages go to private random channel names "
-                    + "that only you and your partner know.");
             return;
         }
 
-        Ui.header(p, "Step 1: Send your partner this pairing code");
         final String code = Partner.pairingCode(c);
-        TextView codeView = Ui.para(p, code);
-        codeView.setTypeface(Typeface.MONOSPACE);
-        codeView.setTextIsSelectable(true);
-        codeView.setTextSize(12);
-        Ui.button(p, "Share pairing code…", new View.OnClickListener() {
-            @Override public void onClick(View v) {
+        Ui.section(v, "1 · Send your partner this code");
+        LinearLayout pc = Ui.paddedCard(v);
+        Ui.body(pc, "They install Steadfast, choose “I'm an accountability partner”, tap Add device and paste it.");
+        Ui.mono(pc, code);
+        Ui.button(pc, "Share pairing code", new View.OnClickListener() {
+            @Override public void onClick(View x) {
                 Intent send = new Intent(Intent.ACTION_SEND).setType("text/plain")
                         .putExtra(Intent.EXTRA_TEXT, "Install Steadfast, choose “I'm an accountability partner”, tap Add device and paste:\n\n" + code);
                 startActivity(Intent.createChooser(send, "Send pairing code"));
             }
         });
-        Ui.button(p, "Copy pairing code", new View.OnClickListener() {
-            @Override public void onClick(View v) { copy("Steadfast pairing code", code); }
+        Ui.tonalButton(pc, "Copy code", new View.OnClickListener() {
+            @Override public void onClick(View x) { copy("Steadfast pairing code", code); }
         });
 
-        Ui.header(p, "Partner uses an iPhone or no Steadfast app?");
-        Ui.para(p, "1. Install the free “ntfy” app and subscribe to this topic (server ntfy.sh):");
-        TextView topic = Ui.para(p, c.alertTopic);
-        topic.setTypeface(Typeface.MONOSPACE);
-        topic.setTextIsSelectable(true);
-        Ui.para(p, "2. In Google Authenticator / Microsoft Authenticator choose “Enter a setup key”, name it Steadfast, and use this key (time-based):");
-        TextView key = Ui.para(p, c.secret);
-        key.setTypeface(Typeface.MONOSPACE);
-        key.setTextIsSelectable(true);
-        Ui.para(p, "The 6-digit code in their authenticator is the “partner code” you'll ask for to loosen settings or unlock.");
-        Ui.button(p, "Copy topic + key", new View.OnClickListener() {
-            @Override public void onClick(View v) { copy("Steadfast", "ntfy topic: " + c.alertTopic + "\nAuthenticator key: " + c.secret); }
+        Ui.section(v, "Partner has an iPhone?");
+        LinearLayout ip = Ui.paddedCard(v);
+        Ui.body(ip, "1. Install the free ntfy app and subscribe to this topic (server ntfy.sh):");
+        Ui.mono(ip, c.alertTopic);
+        Ui.body(ip, "2. In Google or Microsoft Authenticator choose “Enter a setup key”, name it Steadfast, time-based:");
+        Ui.mono(ip, c.secret);
+        Ui.body(ip, "The 6-digit code in their authenticator is the partner code you'll ask for to loosen settings or unlock.");
+        Ui.tonalButton(ip, "Copy topic and key", new View.OnClickListener() {
+            @Override public void onClick(View x) { copy("Steadfast", "ntfy topic: " + c.alertTopic + "\nAuthenticator key: " + c.secret); }
         });
 
-        Ui.header(p, "Options");
-        Ui.row(p, "Partner approval to loosen settings", c.partnerApproval
-                ? "On: removing rules, pausing, etc. needs your partner's code"
-                : "Off: your master PIN is enough (partner is still told)", new View.OnClickListener() {
-            @Override public void onClick(View v) {
-                if (c.partnerApproval) {
-                    Auth.requireLoosen(AccountabilityActivity.this, "turned off partner approval", new Runnable() {
-                        @Override public void run() { c.partnerApproval = false; c.save(AccountabilityActivity.this); render(); }
-                    });
-                } else {
-                    c.partnerApproval = true;
-                    c.save(AccountabilityActivity.this);
-                    EventLog.record(AccountabilityActivity.this, EventLog.CHANGE, "Partner approval is now required to loosen settings.");
-                    render();
-                }
-            }
-        });
-        Ui.row(p, "Instant alerts for blocked content", c.instantAlerts ? "On" : "Off (daily report only)", new View.OnClickListener() {
-            @Override public void onClick(View v) {
-                if (c.instantAlerts) {
-                    Auth.requireLoosen(AccountabilityActivity.this, "turned off instant alerts", new Runnable() {
-                        @Override public void run() { c.instantAlerts = false; c.save(AccountabilityActivity.this); render(); }
-                    });
-                } else { c.instantAlerts = true; c.save(AccountabilityActivity.this); render(); }
-            }
-        });
-        Ui.row(p, "Include top app names in daily report", c.shareAppNames ? "On" : "Off (totals only)", new View.OnClickListener() {
-            @Override public void onClick(View v) {
-                if (c.shareAppNames) {
-                    Auth.requireLoosen(AccountabilityActivity.this, "stopped sharing app names in reports", new Runnable() {
-                        @Override public void run() { c.shareAppNames = false; c.save(AccountabilityActivity.this); render(); }
-                    });
-                } else { c.shareAppNames = true; c.save(AccountabilityActivity.this); render(); }
-            }
-        });
-        Ui.row(p, "Device name", c.deviceName, new View.OnClickListener() {
-            @Override public void onClick(View v) {
+        Ui.section(v, "Options");
+        LinearLayout o = Ui.card(v);
+        Ui.row(o, R.drawable.ic_key, "Partner approval", "Their code is needed to loosen any setting",
+                c.partnerApproval ? Ui.T_SWITCH_ON : Ui.T_SWITCH_OFF, new View.OnClickListener() {
+                    @Override public void onClick(View x) {
+                        if (c.partnerApproval) {
+                            Auth.requireLoosen(AccountabilityActivity.this, "turned off partner approval", new Runnable() {
+                                @Override public void run() { c.partnerApproval = false; c.save(AccountabilityActivity.this); render(); }
+                            });
+                        } else {
+                            c.partnerApproval = true;
+                            c.save(AccountabilityActivity.this);
+                            EventLog.record(AccountabilityActivity.this, EventLog.CHANGE, "Partner approval is now required to loosen settings.");
+                            render();
+                        }
+                    }
+                });
+        Ui.divider(o);
+        Ui.row(o, R.drawable.ic_bell, "Instant alerts", "Off = daily report only",
+                c.instantAlerts ? Ui.T_SWITCH_ON : Ui.T_SWITCH_OFF, new View.OnClickListener() {
+                    @Override public void onClick(View x) {
+                        if (c.instantAlerts) {
+                            Auth.requireLoosen(AccountabilityActivity.this, "turned off instant alerts", new Runnable() {
+                                @Override public void run() { c.instantAlerts = false; c.save(AccountabilityActivity.this); render(); }
+                            });
+                        } else { c.instantAlerts = true; c.save(AccountabilityActivity.this); render(); }
+                    }
+                });
+        Ui.divider(o);
+        Ui.row(o, R.drawable.ic_chart, "Top app names in reports", "Off = totals only",
+                c.shareAppNames ? Ui.T_SWITCH_ON : Ui.T_SWITCH_OFF, new View.OnClickListener() {
+                    @Override public void onClick(View x) {
+                        if (c.shareAppNames) {
+                            Auth.requireLoosen(AccountabilityActivity.this, "stopped sharing app names in reports", new Runnable() {
+                                @Override public void run() { c.shareAppNames = false; c.save(AccountabilityActivity.this); render(); }
+                            });
+                        } else { c.shareAppNames = true; c.save(AccountabilityActivity.this); render(); }
+                    }
+                });
+        Ui.divider(o);
+        Ui.row(o, R.drawable.ic_shield, "Device name", c.deviceName, Ui.T_CHEVRON, new View.OnClickListener() {
+            @Override public void onClick(View x) {
                 Ui.prompt(AccountabilityActivity.this, "Device name", "Shown to your partner", c.deviceName,
                         InputType.TYPE_CLASS_TEXT, new Ui.TextCallback() {
                             @Override public void on(String t) {
@@ -126,26 +122,29 @@ public class AccountabilityActivity extends Activity {
             }
         });
 
-        Ui.header(p, "Test");
-        Ui.button(p, "Send a test alert", new View.OnClickListener() {
-            @Override public void onClick(View v) { Partner.sendTest(AccountabilityActivity.this); Ui.toast(AccountabilityActivity.this, "Sent"); }
+        Ui.section(v, "Test");
+        LinearLayout t = Ui.card(v);
+        Ui.row(t, R.drawable.ic_send, "Send a test alert", null, Ui.T_NONE, new View.OnClickListener() {
+            @Override public void onClick(View x) { Partner.sendTest(AccountabilityActivity.this); Ui.toast(AccountabilityActivity.this, "Sent"); }
         });
-        Ui.button(p, "Send today's report now", new View.OnClickListener() {
-            @Override public void onClick(View v) {
+        Ui.divider(t);
+        Ui.row(t, R.drawable.ic_chart, "Send today's report now", null, Ui.T_NONE, new View.OnClickListener() {
+            @Override public void onClick(View x) {
                 new Thread(new Runnable() { @Override public void run() { Reports.sendNow(AccountabilityActivity.this); } }).start();
                 Ui.toast(AccountabilityActivity.this, "Sending");
             }
         });
 
-        Ui.header(p, "Advanced");
-        Ui.row(p, "Notification server", c.server + " (change only if you self-host ntfy)", new View.OnClickListener() {
-            @Override public void onClick(View v) {
+        Ui.section(v, "Advanced");
+        LinearLayout a = Ui.card(v);
+        Ui.row(a, R.drawable.ic_globe, "Notification server", c.server, Ui.T_CHEVRON, new View.OnClickListener() {
+            @Override public void onClick(View x) {
                 Auth.requireLoosen(AccountabilityActivity.this, "changed the notification server", new Runnable() {
                     @Override public void run() {
-                        Ui.prompt(AccountabilityActivity.this, "ntfy server", null, c.server, InputType.TYPE_TEXT_VARIATION_URI,
-                                new Ui.TextCallback() {
-                                    @Override public void on(String t) {
-                                        if (t.startsWith("https://")) { c.server = t.trim(); c.save(AccountabilityActivity.this); render(); }
+                        Ui.prompt(AccountabilityActivity.this, "ntfy server", "Only change this if you host your own ntfy server.",
+                                c.server, InputType.TYPE_TEXT_VARIATION_URI, new Ui.TextCallback() {
+                                    @Override public void on(String t2) {
+                                        if (t2.startsWith("https://")) { c.server = t2.trim(); c.save(AccountabilityActivity.this); render(); }
                                         else Ui.toast(AccountabilityActivity.this, "Must start with https://");
                                     }
                                 });
@@ -153,17 +152,19 @@ public class AccountabilityActivity extends Activity {
                 });
             }
         });
-        Ui.row(p, "Disconnect partner / new keys", "Your current partner will stop receiving anything", new View.OnClickListener() {
-            @Override public void onClick(View v) {
-                Auth.requireLoosen(AccountabilityActivity.this, "disconnected the accountability partner", new Runnable() {
-                    @Override public void run() {
-                        Partner.flushNow(AccountabilityActivity.this);
-                        Partner.regenerate(AccountabilityActivity.this, c);
-                        render();
+        Ui.divider(a);
+        Ui.row(a, R.drawable.ic_close, "Disconnect partner", "Creates new keys; your current partner stops receiving anything",
+                Ui.T_NONE, null, new View.OnClickListener() {
+                    @Override public void onClick(View x) {
+                        Auth.requireLoosen(AccountabilityActivity.this, "disconnected the accountability partner", new Runnable() {
+                            @Override public void run() {
+                                Partner.flushNow(AccountabilityActivity.this);
+                                Partner.regenerate(AccountabilityActivity.this, c);
+                                render();
+                            }
+                        });
                     }
-                });
-            }
-        });
+                }, 2);
     }
 
     private void copy(String label, String text) {
